@@ -1,0 +1,17 @@
+[tool.poetry]
+name = "simple-genome-downloader"
+version = "0.1.0"
+description = ""
+authors = ["Bill Riehl <wjriehl@lbl.gov>"]
+readme = "README.md"
+packages = [{include = "simple_genome_downloader"}]
+
+[tool.poetry.dependencies]
+python = "^3.10"
+requests = "^2.31.0"
+biopython = "^1.81"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

@@ -1,0 +1,5 @@
+{
+    "service_endpoint": "https://kbase.us/services",
+    "auth_token_endpoint": "https://kbase.us/services/auth/api/V2/token",
+    "genome_type": ["KBaseGenomes.Genome"]
+}
