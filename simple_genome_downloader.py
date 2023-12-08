@@ -178,7 +178,7 @@ def write_genome_protein_fasta(genome_data: dict, genome_path: Path) -> None:
             missing_out.write("\n".join(missing))
         logging.warning(f"genome had no protein translation for {len(missing)} features")
 
-def download_genomes(ws: Workspace, genome_list: list[WorkspaceObjectId], out_file_path: Path, format: str="faa"):
+def download_genomes(ws: Workspace, genome_list: list[WorkspaceObjectId], ws_dir: Path, format: str="faa"):
     """
     Downloads genomes from the KBase workspace and dumps them to file.
     The only format working right now is faa - Protein FASTA file.
@@ -207,7 +207,7 @@ def download_genomes(ws: Workspace, genome_list: list[WorkspaceObjectId], out_fi
         try:
             genome_data = ws.get_objects([upa.upa], data_paths)[0]
             logging.info(f"{cur_genome}/{num_genomes} got genome {upa}")
-            genome_path = out_file_path / str(upa.ws_id) / str(upa.obj_id)
+            genome_path = ws_dir / str(upa.obj_id)
             os.makedirs(genome_path, exist_ok=True)
             logging.info(f"{cur_genome}/{num_genomes} writing {upa} to disk")
             write_genome_info(genome_data, genome_path)
@@ -218,7 +218,7 @@ def download_genomes(ws: Workspace, genome_list: list[WorkspaceObjectId], out_fi
             logging.error(err_str)
             print(err_str, file=sys.stderr)
 
-def get_restarted_genome_list(genomes_file_path: Path, out_dir: Path, format) -> list[WorkspaceObjectId]:
+def get_restarted_genome_list(genomes_file_path: Path, ws_dir: Path, format) -> list[WorkspaceObjectId]:
     """
     This works as a checkpoint manager for the genome downloader.
     On the first pass, a genomes list file is created - the list of all genome UPAs to download.
@@ -229,8 +229,8 @@ def get_restarted_genome_list(genomes_file_path: Path, out_dir: Path, format) ->
     already downloaded, in case it was only a partial download.
 
     :param genomes_file_path: the Path to the genomes list file, expects to see a single UPA per line.
-    :param out_dir: the directory where downloaded genomes are stored. In this directory, there should be
-        another dir for the workspace id, and one for each genome object id.
+    :param ws_dir: the directory where downloaded genomes are stored. In this directory, there should be
+        another dir each genome object id.
     :param format: the format for genomes being downloaded (should be faa for now), used to
         look for file extensions.
     """
@@ -245,7 +245,7 @@ def get_restarted_genome_list(genomes_file_path: Path, out_dir: Path, format) ->
     last_done_idx = 0
     for idx, genome in enumerate(initial_genomes_list):
         upa = WorkspaceObjectId.from_upa(genome)
-        genome_dir = out_dir / str(upa.ws_id) / str(upa.obj_id)
+        genome_dir = ws_dir / str(upa.obj_id)
         is_done = False
         if genome_dir.is_dir() and (genome_dir / "info.json").is_file():
             # check for genome file
@@ -275,7 +275,9 @@ def run_genome_downloader(config: DownloaderConfig, args: dict[str, Any], format
 
     ws_id = args["ws_id"]
     ws = Workspace(token, config.workspace_endpoint)
-    genomes_list_file = args["out_dir"] / "genomes_list.txt"
+    ws_path = args["out_dir"] / str(ws_id)
+    os.makedirs(ws_path, exist_ok=True)
+    genomes_list_file = ws_path / "genomes_list.txt"
     genomes_list = None
     if args["restart"] and genomes_list_file.is_file():
         # restart from here. get amended genomes list
@@ -288,7 +290,7 @@ def run_genome_downloader(config: DownloaderConfig, args: dict[str, Any], format
         genomes_list = get_genome_list(ws, ws_id, config.genome_types, genomes_list_file)
     print(f"downloading {len(genomes_list)} genomes")
     print(f"See logfile {LOG_FILE_PATH} for details")
-    download_genomes(ws, genomes_list, args["out_dir"], format=format)
+    download_genomes(ws, genomes_list, ws_path, format=format)
 
 if __name__ == "__main__":
     logging.basicConfig(
