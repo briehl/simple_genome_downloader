@@ -14,6 +14,9 @@ from typing import Any, Tuple
 
 KB_AUTH_TOKEN = "KB_AUTH_TOKEN"
 LOG_FILE_PATH = Path(__file__).parent / "genome_downloader.log"
+PROTEIN_FORMAT = "faa"
+JSON_FORMAT = "json"
+FORMATS = [PROTEIN_FORMAT, JSON_FORMAT]
 
 class DownloaderConfig:
     auth_endpoint: str
@@ -57,6 +60,7 @@ def load_args() -> dict[str, Any]:
     parser = argparse.ArgumentParser(description=desc)
     parser.add_argument('-n', dest='narrative', type=str, required=True, help="Narrative id (for example, 49058 from https://narrative.kbase.us/narrative/49058)")
     parser.add_argument('-o', dest='out_directory', type=str, required=True, help="Output directory")
+    parser.add_argument('-f', dest='format', type=str, required=True, help=f"Output genome format, one of {FORMATS}")
     parser.add_argument('--restart', dest='restart', action="store_true", required=False, help="restart a partly complete or failed run")
     args = parser.parse_args()
     if len(sys.argv) == 1:
@@ -69,7 +73,8 @@ def load_args() -> dict[str, Any]:
     return {
         "ws_id": args.narrative,
         "out_dir": out_dir,
-        "restart": args.restart
+        "restart": args.restart,
+        "format": args.format
     }
 
 def load_config() -> DownloaderConfig:
@@ -178,13 +183,21 @@ def write_genome_protein_fasta(genome_data: dict, genome_path: Path) -> None:
             missing_out.write("\n".join(missing))
         logging.warning(f"genome had no protein translation for {len(missing)} features")
 
+def write_genome_json(genome_data: dict, genome_path: Path) -> None:
+    """
+    Dumps the genome data out to JSON file in genome_path without any modification.
+    """
+    file_name = f"{genome_data['info'][1]}.json"
+    with open(genome_path / file_name, "w") as genome_out:
+        json.dump(genome_data["data"], genome_out, indent=4)
+
 def download_genomes(ws: Workspace, genome_list: list[WorkspaceObjectId], ws_dir: Path, format: str="faa"):
     """
     Downloads genomes from the KBase workspace and dumps them to file.
     The only format working right now is faa - Protein FASTA file.
     """
-    if not format == "faa":
-        ValueError("Only downloading in FASTA amino acid format right now")
+    if format not in FORMATS:
+        ValueError(f"format must be one of '{FORMATS}'")
     data_paths = [
         "dna_size",
         "cdss/[*]/id",
@@ -205,13 +218,19 @@ def download_genomes(ws: Workspace, genome_list: list[WorkspaceObjectId], ws_dir
         cur_genome = idx + 1
         logging.info(f"{cur_genome}/{num_genomes} fetching genome {upa} ")
         try:
-            genome_data = ws.get_objects([upa.upa], data_paths)[0]
+            if format == PROTEIN_FORMAT:
+                genome_data = ws.get_objects([upa.upa], data_paths)[0]
+            elif format == JSON_FORMAT:
+                genome_data = ws.get_objects([upa.upa])[0]
             logging.info(f"{cur_genome}/{num_genomes} got genome {upa}")
             genome_path = ws_dir / str(upa.obj_id)
             os.makedirs(genome_path, exist_ok=True)
             logging.info(f"{cur_genome}/{num_genomes} writing {upa} to disk")
             write_genome_info(genome_data, genome_path)
-            write_genome_protein_fasta(genome_data, genome_path)
+            if format == PROTEIN_FORMAT:
+                write_genome_protein_fasta(genome_data, genome_path)
+            elif format == JSON_FORMAT:
+                write_genome_json(genome_data, genome_path)
             logging.info(f"{cur_genome}/{num_genomes} done saving {upa}")
         except Exception as err:
             err_str = f"{cur_genome}/{num_genomes} Unable to fetch genome {upa}! {err}"
@@ -260,13 +279,17 @@ def get_restarted_genome_list(genomes_file_path: Path, ws_dir: Path, format) -> 
     print(f"{len(initial_genomes_list) - len(genomes_list)} genomes appear to be complete.")
     return [WorkspaceObjectId.from_upa(upa) for upa in genomes_list]
 
-def run_genome_downloader(config: DownloaderConfig, args: dict[str, Any], format="faa") -> None:
+def run_genome_downloader(config: DownloaderConfig, args: dict[str, Any]) -> None:
     """
     Run the genome downloader!
     1. check that the auth token in KB_AUTH_TOKEN is valid.
     2. build a genomes list, either from scratch or from restarting.
     3. Pull the genomes in that list, one at a time (for now, unless that proves to take too long).
     """
+    format = args["format"].lower()
+    if format not in FORMATS:
+        raise ValueError(f"format must be one of {FORMATS}")
+
     if not os.environ[KB_AUTH_TOKEN]:
         raise RuntimeError("The KB_AUTH_TOKEN environment variable must be set")
 

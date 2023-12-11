@@ -1,5 +1,6 @@
 from .simple_client import make_kbase_jsonrpc_1_call
 from typing import Any
+from copy import deepcopy
 
 class WorkspaceObjectId:
     upa: str
@@ -79,8 +80,12 @@ class Workspace:
         return object_upas
 
     def get_objects(self: "Workspace", upas: list[str], data_paths: list[str]=None) -> dict:
-        obj_id_list = [{"ref": upa, "included": data_paths} for upa in upas]
-        return self._call("get_objects2", {"objects": obj_id_list})["data"]
+        base_params = {}
+        if data_paths is not None:
+            base_params["included"] = data_paths
+
+        params_list = [dict(deepcopy(base_params)) | {"ref": upa} for upa in upas]
+        return self._call("get_objects2", {"objects": params_list})["data"]
 
     @classmethod
     def obj_info_to_json(cls, obj_info: list[Any]) -> dict[str, Any]:
