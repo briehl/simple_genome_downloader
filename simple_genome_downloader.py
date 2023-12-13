@@ -304,7 +304,7 @@ def run_genome_downloader(config: DownloaderConfig, args: dict[str, Any]) -> Non
     genomes_list = None
     if args["restart"] and genomes_list_file.is_file():
         # restart from here. get amended genomes list
-        genomes_list = get_restarted_genome_list(genomes_list_file, args["out_dir"], format)
+        genomes_list = get_restarted_genome_list(genomes_list_file, ws_path, format)
     elif args["restart"] and not genomes_list_file.is_file():
         not_restarting_msg = "Restart flag present, but no genomes list file found, starting from scratch..."
         print(not_restarting_msg)
